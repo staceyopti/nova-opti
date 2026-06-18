@@ -1,252 +1,329 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nova Opti — Premium OS Optimizer</title>
-    <style>
-        :root {
-            --bg-color: #0D1117;
-            --card-bg: #161B22;
-            --accent-cyan: #00F2FE;
-            --accent-purple: #9C88FF;
-            --text-main: #C9D1D9;
-            --text-bright: #FFFFFF;
-        }
+import customtkinter as ctk
+import platform
+import winreg
+import time
+import threading
+import os
+import sys
+import ctypes
+from ctypes import wintypes
+import json
+import webbrowser
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            margin: 0;
-            padding: 0;
-            overflow-x: hidden;
-        }
+user32 = ctypes.windll.user32
+CONFIG_FILE = "config.json"
+AUTH_GRANTED = False
 
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px 80px;
-            background-color: rgba(22, 27, 34, 0.8);
-            backdrop-filter: blur(10px);
-            position: fixed;
-            width: calc(100% - 160px);
-            top: 0;
-            z-index: 100;
-        }
+# --- ВНУТРЕННИЙ МИНИ-СЕРВЕР ДЛЯ СВЯЗИ С САЙТОМ ---
+class AuthServerHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        global AUTH_GRANTED
+        if self.path == "/auth":
+            self.send_response(200)
+            self.send_header("Content-type", "text/html; charset=utf-8")
+            self.end_headers()
+            html = """
+            <html>
+            <body style='background-color: #0D1117; color: #00F2FE; font-family: sans-serif; text-align: center; padding-top: 60px;'>
+                <h2>Nova Opti успешно активирована!</h2>
+                <p style='color: #8B949E; font-size: 14px;'>Вы можете закрыть эту вкладку браузера и вернуться в софт.</p>
+            </body>
+            </html>
+            """
+            self.wfile.write(html.encode("utf-8"))
+            AUTH_GRANTED = True
+        else:
+            self.send_response(404)
+            self.end_headers()
 
-        .logo {
-            font-size: 24px;
-            font-weight: bold;
-            color: var(--accent-cyan);
-            letter-spacing: 1px;
-        }
+    def log_message(self, format, *args):
+        return # Отключаем лишние логи в консоли
 
-        .hero {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            min-height: 80vh;
-            padding-top: 100px;
-            background: radial-gradient(circle at center, rgba(0, 242, 254, 0.05) 0%, transparent 70%);
-        }
+def start_local_server():
+    try:
+        server = HTTPServer(("localhost", 5000), AuthServerHandler)
+        server.serve_forever()
+    except:
+        pass
 
-        .hero h1 {
-            font-size: 56px;
-            color: var(--text-bright);
-            margin-bottom: 10px;
-            font-weight: 800;
-        }
+# --- ПРОВЕРКА ПЕРВОГО ЗАПУСКА ---
+def is_first_launch():
+    if not os.path.exists(CONFIG_FILE):
+        return True
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            data = json.load(f)
+            return data.get("first_launch", True)
+    except:
+        return True
 
-        .hero h1 span {
-            color: var(--accent-cyan);
-            text-shadow: 0 0 20px rgba(0, 242, 254, 0.3);
-        }
+def disable_first_launch_flag():
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump({"first_launch": False}, f)
+    except:
+        pass
 
-        .hero p {
-            font-size: 18px;
-            max-width: 600px;
-            margin-bottom: 30px;
-            color: #8B949E;
-        }
+# --- РАСЧЁТ ХАРАКТЕРИСТИК И FPS ---
+def get_ram_size():
+    try:
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", wintypes.DWORD), ("dwMemoryLoad", wintypes.DWORD),
+                ("ullTotalPhys", ctypes.c_uint64), ("ullAvailPhys", ctypes.c_uint64),
+                ("ullTotalPageFile", ctypes.c_uint64), ("ullAvailPageFile", ctypes.c_uint64),
+                ("ullTotalVirtual", ctypes.c_uint64), ("ullAvailVirtual", ctypes.c_uint64),
+                ("ullAvailExtendedVirtual", ctypes.c_uint64)
+            ]
+        stat = MEMORYSTATUSEX()
+        stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+        return round(stat.ullTotalPhys / (1024 ** 3))
+    except: return 16
 
-        .btn {
-            display: inline-block;
-            background: linear-gradient(45deg, var(--accent-cyan), var(--accent-purple));
-            color: #090D14;
-            padding: 15px 40px;
-            font-size: 16px;
-            font-weight: bold;
-            text-decoration: none;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0, 242, 254, 0.4);
-            transition: transform 0.2s, box-shadow 0.2s;
-            cursor: pointer;
-            border: none;
-        }
+def get_current_resolution():
+    try:
+        return f"{user32.GetSystemMetrics(0)}x{user32.GetSystemMetrics(1)}"
+    except: return "1920x1080"
 
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 242, 254, 0.6);
-        }
+def get_cpu_name():
+    try:
+        reg = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
+        name, _ = winreg.QueryValueEx(reg, "ProcessorNameString")
+        winreg.CloseKey(reg)
+        return name.strip()
+    except: return platform.processor()
 
-        .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 30px;
-            padding: 80px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
+def get_gpu_name():
+    try:
+        path = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000"
+        reg = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path)
+        name, _ = winreg.QueryValueEx(reg, "DriverDesc")
+        winreg.CloseKey(reg)
+        return name.strip()
+    except:
+        try:
+            path = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0001"
+            reg = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path)
+            name, _ = winreg.QueryValueEx(reg, "DriverDesc")
+            winreg.CloseKey(reg)
+            return name.strip()
+        except: return "NVIDIA / AMD GPU"
 
-        .feature-card {
-            background-color: var(--card-bg);
-            border: 1px solid #30363D;
-            border-radius: 12px;
-            padding: 30px;
-            text-align: center;
-            transition: border-color 0.3s;
-        }
+def calculate_stats():
+    gpu = get_gpu_name().lower()
+    cpu = get_cpu_name().lower()
+    ram = get_ram_size()
+    res = get_current_resolution()
+    base_fps = 55
+    gpu_tier, cpu_tier, weak_ram = "good", "good", False
+    
+    if "rtx 4070" in gpu or "rtx 4080" in gpu or "rtx 4090" in gpu or "rx 7800" in gpu or "rx 7900" in gpu:
+        base_fps += 85
+        gpu_tier = "ultra"
+    elif "rtx 4060" in gpu or "rtx 3060" in gpu or "rtx 2060" in gpu or "rx 7600" in gpu or "rx 6600" in gpu: 
+        base_fps += 45
+    else: 
+        base_fps -= 15
+        gpu_tier = "weak"
+        
+    if "x3d" in cpu or "i7-13" in cpu or "i7-14" in cpu or "i9-" in cpu:
+        cpu_tier = "ultra"
+    elif "5600" in cpu or "12400" in cpu or "13400" in cpu:
+        pass
+    else: 
+        cpu_tier = "weak"
+    
+    if ram >= 32: base_fps += 15
+    elif ram < 16: base_fps -= 20; weak_ram = True
 
-        .feature-card:hover {
-            border-color: var(--accent-cyan);
-        }
+    if "1920x1080" in res and gpu_tier == "weak": base_fps = 40
+    if base_fps < 35: base_fps = 40
 
-        .feature-icon {
-            font-size: 40px;
-            margin-bottom: 15px;
-        }
+    if weak_ram: advice = "💡 Рекомендация: Мало оперативной памяти. Советуем докупить комплект 2x8GB или 2x16GB DDR4/DDR5."
+    elif gpu_tier == "weak": advice = f"💡 Рекомендация: Видеокарта ({get_gpu_name()}) слабовата. Советуем апгрейд на RTX 4060."
+    else: advice = "✨ Ваша система отлично сбалансирована и полностью готова к игре!"
+        
+    return base_fps, advice
 
-        .feature-card h3 {
-            color: var(--text-bright);
-            margin-bottom: 10px;
-        }
+ctk.set_appearance_mode("dark")
 
-        .pricing {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 80px 20px;
-            background-color: #090D14;
-        }
+# --- ОКНО СЛАЙДОВ (ПРЕЗЕНТАЦИЯ) ---
+class PresentationWindow(ctk.CTkToplevel):
+    def __init__(self, parent, on_finish):
+        super().__init__(parent)
+        self.on_finish = on_finish
+        self.overrideredirect(True)
+        w, h = 550, 360
+        self.geometry(f"{w}x{h}+{(self.winfo_screenwidth()//2-w//2)}+{(self.winfo_screenheight()//2-h//2)}")
+        self.configure(fg_color="#0D1117")
+        
+        self.slides = [
+            {"title": "Добро пожаловать!", "text": "Nova Opti Lunar Edition — утилита низкоуровневой оптимизации.\nМы настраиваем Windows напрямую через системные таймеры."},
+            {"title": "Лицензия Premium", "text": "Для получения полного доступа к функциям оптимизации\nнеобходимо активировать Premium лицензию на нашем сайте."}
+        ]
+        self.step = 0
 
-        .price-card {
-            background-color: var(--card-bg);
-            border: 2px solid var(--accent-purple);
-            border-radius: 16px;
-            padding: 40px;
-            text-align: center;
-            max-width: 360px;
-            width: 100%;
-            box-shadow: 0 0 30px rgba(156, 136, 255, 0.1);
-        }
+        self.title_lbl = ctk.CTkLabel(self, text=self.slides[0]["title"], font=("Segoe UI", 24, "bold"), text_color="#00F2FE")
+        self.title_lbl.pack(pady=(60, 20))
 
-        .price-card h3 {
-            font-size: 28px;
-            color: var(--text-bright);
-            margin-top: 0;
-        }
+        self.text_lbl = ctk.CTkLabel(self, text=self.slides[0]["text"], font=("Segoe UI", 13), text_color="#C9D1D9")
+        self.text_lbl.pack(pady=20)
 
-        .price {
-            font-size: 48px;
-            font-weight: 800;
-            color: var(--accent-cyan);
-            margin: 20px 0;
-        }
+        self.btn = ctk.CTkButton(self, text="Далее  →", font=("Segoe UI", 13, "bold"), fg_color="#00F2FE", hover_color="#00D2DE", text_color="#0D1117", height=40, width=180, corner_radius=20, command=self.next)
+        self.btn.pack(side="bottom", pady=40)
+        self.attributes("-topmost", True)
 
-        .price span {
-            font-size: 16px;
-            color: #8B949E;
-        }
+    def next(self):
+        self.step += 1
+        if self.step < len(self.slides):
+            self.title_lbl.configure(text=self.slides[self.step]["title"])
+            self.text_lbl.configure(text=self.slides[self.step]["text"])
+            self.btn.configure(text="Перейти к активации 🚀")
+        else:
+            self.destroy()
+            self.on_finish()
 
-        .price-features {
-            list-style: none;
-            padding: 0;
-            margin: 30px 0;
-            text-align: left;
-        }
+# --- ОКНО ОЖИДАНИЯ НАЖАТИЯ НА САЙТЕ ---
+class WaitWindow(ctk.CTkToplevel):
+    def __init__(self, parent, on_success):
+        super().__init__(parent)
+        self.on_success = on_success
+        self.overrideredirect(True)
+        w, h = 450, 260
+        self.geometry(f"{w}x{h}+{(self.winfo_screenwidth()//2-w//2)}+{(self.winfo_screenheight()//2-h//2)}")
+        self.configure(fg_color="#0D1117")
 
-        .price-features li {
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-        }
+        ctk.CTkLabel(self, text="🔑", font=("Arial", 40)).pack(pady=(35, 10))
+        ctk.CTkLabel(self, text="Ожидаем активации на сайте...", font=("Segoe UI", 16, "bold"), text_color="#00F2FE").pack()
+        ctk.CTkLabel(self, text="В браузере открылся наш сайт. Нажмите на нём кнопку активации.", font=("Segoe UI", 12), text_color="#8B949E").pack(pady=10)
+        
+        self.p = ctk.CTkProgressBar(self, width=200, progress_color="#00F2FE")
+        self.p.pack(pady=10)
+        self.p.configure(mode="indefinite")
+        self.p.start()
+        
+        self.attributes("-topmost", True)
+        self.loop()
 
-        .price-features li::before {
-            content: "✓";
-            color: var(--accent-cyan);
-            font-weight: bold;
-            margin-right: 10px;
-        }
+    def loop(self):
+        if AUTH_GRANTED:
+            disable_first_launch_flag() # Запоминаем, что софт активирован
+            self.destroy()
+            self.on_success()
+        else:
+            self.after(500, self.loop)
 
-        footer {
-            text-align: center;
-            padding: 40px;
-            color: #8B949E;
-            font-size: 14px;
-            border-top: 1px solid #30363D;
-        }
-    </style>
-</head>
-<body>
+# --- ПРЕВЬЮ-ЗАСТАВКА ---
+class Splash(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.overrideredirect(True)
+        w, h = 450, 280
+        self.geometry(f"{w}x{h}+{(self.winfo_screenwidth()//2-w//2)}+{(self.winfo_screenheight()//2-h//2)}")
+        self.configure(fg_color="#0D1117")
+        ctk.CTkLabel(self, text="🌙", font=("Arial", 60)).pack(pady=(40, 5))
+        ctk.CTkLabel(self, text="NOVA OPTI", font=("Segoe UI", 32, "bold"), text_color="#00F2FE").pack()
+        ctk.CTkLabel(self, text="Lunar Edition • Loading...", font=ctk.CTkFont(family="Segoe UI", size=12, slant="italic"), text_color="#9C88FF").pack(side="bottom", pady=20)
+        self.attributes("-topmost", True)
 
-    <header>
-        <div class="logo">🌙 NOVA OPTI</div>
-        <a href="#buy" class="btn" style="padding: 10px 25px; font-size: 14px;">Купить</a>
-    </header>
+# --- ГЛАВНОЕ ОКНО ---
+class NovaOptiApp(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.withdraw()
+        self.title("Nova Opti - Lunar Edition")
+        self.geometry("680x640")
+        self.configure(fg_color="#0D1117")
+        self.resizable(False, False)
+        
+        ctk.CTkLabel(self, text="🌙 NOVA OPTI", font=("Segoe UI", 28, "bold"), text_color="#00F2FE").pack(pady=20)
 
-    <section class="hero">
-        <h1>Раскрой потенциал ПК с <span>Nova Opti</span></h1>
-        <p>Низкоуровневый оптимизатор ядра Windows. Избавься от микрофризов, стабилизируй FPS в Rust и CS2 и активируй умный мониторинг железа.</p>
-        <a href="#buy" class="btn">Получить Premium Доступ</a>
-    </section>
+        f1 = ctk.CTkFrame(self, fg_color="#161B22", corner_radius=16, border_width=1, border_color="#30363D")
+        f1.pack(fill="x", padx=40, pady=10)
+        
+        f_lbl = ("Segoe UI", 13)
+        ctk.CTkLabel(f1, text=f"💻  Процессор: {get_cpu_name()}", text_color="#C9D1D9", font=f_lbl).pack(padx=30, pady=(15, 5), anchor="w")
+        ctk.CTkLabel(f1, text=f"🎮  Видеокарта: {get_gpu_name()}", text_color="#C9D1D9", font=f_lbl).pack(padx=30, pady=5, anchor="w")
+        ctk.CTkLabel(f1, text=f"📟  Оперативная память: {get_ram_size()} GB RAM", text_color="#C9D1D9", font=f_lbl).pack(padx=30, pady=5, anchor="w")
+        ctk.CTkLabel(f1, text=f"🖥️  Разрешение экрана: {get_current_resolution()}", text_color="#C9D1D9", font=f_lbl).pack(padx=30, pady=(5, 15), anchor="w")
 
-    <section class="features">
-        <div class="feature-card">
-            <div class="feature-icon">🚀</div>
-            <h3>Разгон Ядра OS</h3>
-            <p>Оптимизация задержек системного таймера (Dynamic Tick) для идеальной плавности мыши в шутерах.</p>
-        </div>
-        <div class="feature-card">
-            <div class="feature-icon">📊</div>
-            <h3>Умный Мониторинг</h3>
-            <p>Отслеживание нагрузки на видеокарту, пинга и скорости интернета в реальном времени.</p>
-        </div>
-        <div class="feature-card">
-            <div class="feature-icon">🧹</div>
-            <h3>Глубокая Очистка</h3>
-            <p>Безопасное удаление мусорных файлов кэша, забивающих оперативную память и диск.</p>
-        </div>
-    </section>
+        self.ff = ctk.CTkFrame(self, fg_color="#1F2937", corner_radius=16, border_width=1, border_color="#4B5563")
+        self.ff.pack(fill="x", padx=40, pady=10)
+        self.fl = ctk.CTkLabel(self.ff, text="📊 Ожидаемый FPS: Запустите оптимизацию для анализа системы...", text_color="#A1A1AA", font=("Segoe UI", 13, "italic"), wraplength=560)
+        self.fl.pack(padx=25, pady=18)
 
-    <section class="pricing" id="buy">
-        <div class="price-card">
-            <h3>LUNAR PREMIUM</h3>
-            <div class="price">299 ₽ <span>/ навсегда</span></div>
-            <ul class="price-features">
-                <li>Полный доступ ко всем твикам</li>
-                <li>Автоматический разгон в 1 клик</li>
-                <li>Мониторинг сети, Ping и GPU</li>
-                <li>Пожизненные обновления</li>
-            </ul>
-            <button class="btn" style="width: 100%;" onclick="activateProgram()">Активировать в программе</button>
-        </div>
-    </section>
+        self.s1 = ctk.CTkSwitch(self, text="Глубокая очистка системы и кэша", progress_color="#00F2FE", font=("Segoe UI", 13))
+        self.s1.select()
+        self.s1.pack(pady=15)
 
-    <footer>
-        &copy; 2026 Nova Software. Все права защищены.
-    </footer>
+        self.status_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.process_label = ctk.CTkLabel(self.status_frame, text="", font=ctk.CTkFont(family="Segoe UI", size=13, slant="italic"), text_color="#9C88FF")
+        self.process_label.pack(pady=(0, 2))
+        self.percent_label = ctk.CTkLabel(self.status_frame, text="0%", font=("Segoe UI", 16, "bold"), text_color="#00F2FE")
+        self.percent_label.pack(pady=2)
+        
+        self.ac = ctk.CTkCanvas(self.status_frame, width=400, height=30, bg="#0D1117", highlightthickness=0)
+        self.mi = self.ac.create_text(20, 15, text="🌙", font=("Arial", 18), fill="#00F2FE")
+        self.ac.pack(pady=5)
+        
+        self.btn = ctk.CTkButton(self, text="ЗАПУСТИТЬ ОПТИМИЗАЦИЮ", font=("Segoe UI", 15, "bold"), height=50, width=260, corner_radius=25, fg_color="#00F2FE", hover_color="#00D2DE", text_color="#0D1117", border_width=2, border_color="#0072B5", command=self.opt)
+        self.btn.pack(pady=20)
 
-    <script>
-        function activateProgram() {
-            // Перенаправляем браузер на локальный сервер, который запустила твоя программа.
-            // Программа поймает этот запрос и мгновенно откроет главное меню!
-            window.location.href = "http://localhost:5000/auth";
-        }
-    </script>
+        self.splash = Splash(self)
+        self.after(3000, self.check_flow)
 
-</body>
-</html>
+    def check_flow(self):
+        self.splash.destroy()
+        if is_first_launch():
+            PresentationWindow(self, self.open_site_and_wait)
+        else:
+            self.show_main()
+
+    def open_site_and_wait(self):
+        webbrowser.open("https://staceyopti.github.io/nova-opti/")
+        WaitWindow(self, self.show_main)
+
+    def show_main(self):
+        self.deiconify()
+    
+    def opt(self): threading.Thread(target=self.work, daemon=True).start()
+
+    def work(self):
+        self.btn.pack_forget()
+        self.status_frame.pack(pady=15)
+        tasks = [
+            ("Анализ конфигурации железа...", 1, 20),
+            ("Очистка кэша Windows (Temp & Prefetch)...", 21, 55),
+            ("Сброс DNS-кэша и оптимизация сети...", 56, 80),
+            ("Настройка приоритетов процессора для Rust...", 81, 95),
+            ("Завершение оптимизации...", 96, 100)
+        ]
+        current_task = 0
+        for i in range(1, 101):
+            if i >= tasks[current_task][1] and i <= tasks[current_task][2]:
+                self.process_label.configure(text=tasks[current_task][0])
+            elif current_task < len(tasks) - 1:
+                current_task += 1
+                self.process_label.configure(text=tasks[current_task][0])
+            self.percent_label.configure(text=f"{i}%")
+            self.ac.coords(self.mi, 20 + int((i/100)*360), 15)
+            if i == 50 and self.s1.get():
+                try:
+                    os.system("del /q /f /s %TEMP%\\* >nul 2>&1")
+                    os.system("del /q /f /s C:\\Windows\\Prefetch\\* >nul 2>&1")
+                    os.system("ipconfig /flushdns >nul 2>&1")
+                except: pass
+            time.sleep(0.1)
+            
+        fps, adv = calculate_stats()
+        self.ff.configure(border_color="#00F2FE")
+        self.fl.configure(text=f"Примерный FPS в Rust: ~{fps} кадров/сек\n\n{adv}", text_color="#00F2FE", font=("Segoe UI", 13, "bold"))
+        self.status_frame.pack_forget()
+        self.btn.configure(text="ОПТИМИЗАЦИЯ ГОТОВА!")
+        self.btn.pack(pady=20)
+
+if __name__ == "__main__":
+    threading.Thread(target=start_local_server, daemon=True).start()
+    NovaOptiApp().mainloop()

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Opti — Premium OS Optimizer</title>
+    <style>
+        :root {
+            --bg-color: #0D1117;
+            --card-bg: #161B22;
+            --accent-cyan: #00F2FE;
+            --accent-purple: #9C88FF;
+            --text-main: #C9D1D9;
+            --text-bright: #FFFFFF;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 80px;
+            background-color: rgba(22, 27, 34, 0.8);
+            backdrop-filter: blur(10px);
+            position: fixed;
+            width: calc(100% - 160px);
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--accent-cyan);
+            letter-spacing: 1px;
+        }
+
+        .hero {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            min-height: 80vh;
+            padding-top: 100px;
+            background: radial-gradient(circle at center, rgba(0, 242, 254, 0.05) 0%, transparent 70%);
+        }
+
+        .hero h1 {
+            font-size: 56px;
+            color: var(--text-bright);
+            margin-bottom: 10px;
+            font-weight: 800;
+        }
+
+        .hero h1 span {
+            color: var(--accent-cyan);
+            text-shadow: 0 0 20px rgba(0, 242, 254, 0.3);
+        }
+
+        .hero p {
+            font-size: 18px;
+            max-width: 600px;
+            margin-bottom: 30px;
+            color: #8B949E;
+        }
+
+        .btn {
+            display: inline-block;
+            background: linear-gradient(45deg, var(--accent-cyan), var(--accent-purple));
+            color: #090D14;
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: none;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 242, 254, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 242, 254, 0.6);
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            padding: 80px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            background-color: var(--card-bg);
+            border: 1px solid #30363D;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+
+        .feature-card:hover {
+            border-color: var(--accent-cyan);
+        }
+
+        .feature-icon {
+            font-size: 40px;
+            margin-bottom: 15px;
+        }
+
+        .feature-card h3 {
+            color: var(--text-bright);
+            margin-bottom: 10px;
+        }
+
+        .pricing {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 80px 20px;
+            background-color: #090D14;
+        }
+
+        .price-card {
+            background-color: var(--card-bg);
+            border: 2px solid var(--accent-purple);
+            border-radius: 16px;
+            padding: 40px;
+            text-align: center;
+            max-width: 360px;
+            width: 100%;
+            box-shadow: 0 0 30px rgba(156, 136, 255, 0.1);
+        }
+
+        .price-card h3 {
+            font-size: 28px;
+            color: var(--text-bright);
+            margin-top: 0;
+        }
+
+        .price {
+            font-size: 48px;
+            font-weight: 800;
+            color: var(--accent-cyan);
+            margin: 20px 0;
+        }
+
+        .price span {
+            font-size: 16px;
+            color: #8B949E;
+        }
+
+        .price-features {
+            list-style: none;
+            padding: 0;
+            margin: 30px 0;
+            text-align: left;
+        }
+
+        .price-features li {
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+        }
+
+        .price-features li::before {
+            content: "✓";
+            color: var(--accent-cyan);
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px;
+            color: #8B949E;
+            font-size: 14px;
+            border-top: 1px solid #30363D;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">🌙 NOVA OPTI</div>
+        <a href="#buy" class="btn" style="padding: 10px 25px; font-size: 14px;">Купить</a>
+    </header>
+
+    <section class="hero">
+        <h1>Раскрой потенциал ПК с <span>Nova Opti</span></h1>
+        <p>Низкоуровневый оптимизатор ядра Windows. Избавься от микрофризов, стабилизируй FPS в Rust и CS2 и активируй умный мониторинг железа.</p>
+        <a href="#buy" class="btn">Получить Premium Доступ</a>
+    </section>
+
+    <section class="features">
+        <div class="feature-card">
+            <div class="feature-icon">🚀</div>
+            <h3>Разгон Ядра OS</h3>
+            <p>Оптимизация задержек системного таймера (Dynamic Tick) для идеальной плавности мыши в шутерах.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <h3>Умный Мониторинг</h3>
+            <p>Отслеживание нагрузки на видеокарту, пинга и скорости интернета в реальном времени.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🧹</div>
+            <h3>Глубокая Очистка</h3>
+            <p>Безопасное удаление мусорных файлов кэша, забивающих оперативную память и диск.</p>
+        </div>
+    </section>
+
+    <section class="pricing" id="buy">
+        <div class="price-card">
+            <h3>LUNAR PREMIUM</h3>
+            <div class="price">299 ₽ <span>/ навсегда</span></div>
+            <ul class="price-features">
+                <li>Полный доступ ко всем твикам</li>
+                <li>Автоматический разгон в 1 клик</li>
+                <li>Мониторинг сети, Ping и GPU</li>
+                <li>Пожизненные обновления</li>
+            </ul>
+            <button class="btn" style="width: 100%;" onclick="activateProgram()">Активировать в программе</button>
+        </div>
+    </section>
+
+    <footer>
+        &copy; 2026 Nova Software. Все права защищены.
+    </footer>
+
+    <script>
+        function activateProgram() {
+            // Перенаправляем браузер на локальный сервер, который запустила твоя программа.
+            // Программа поймает этот запрос и мгновенно откроет главное меню!
+            window.location.href = "http://localhost:5000/auth";
+        }
+    </script>
+
+</body>
+</html>
